@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Executivo Real-Time | Convenção de Vendas 2026</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- PapaParse: leitura robusta do CSV publicado -->
+    <script src="/vendor/papaparse.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            900: '#0c4a6e',
+                            950: '#082f49'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .tab-btn.active {
+            background-color: #0284c7;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        
+        @keyframes pulse-emerald {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.9); }
+        }
+        .live-dot {
+            animation: pulse-emerald 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-full font-sans text-slate-100 antialiased bg-slate-950 flex flex-col">
+
+    <!-- Header Executivo -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                
+                <!-- Logo e Status Ao Vivo -->
+                <div class="flex items-center space-x-4">
+                    <div class="bg-gradient-to-tr from-sky-600 to-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-sky-500/20">
+                        <i data-lucide="building-2" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2.5">
+                            <h1 class="text-lg font-bold tracking-tight text-white">Convenção de Vendas 2026</h1>
+                            <span class="bg-sky-500/10 text-sky-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-sky-500/20 tracking-wide uppercase">Grupo Base</span>
+                        </div>
+                        <div class="flex items-center space-x-2 mt-0.5">
+                            <span class="text-xs text-slate-400">Hotel Vitória Indaiatuba • 06 e 07/Nov</span>
+                            <span class="text-slate-600">•</span>
+                            
+                            <!-- Indicador de Sincronização ao Vivo -->
+                            <div id="connectionBadge" class="flex items-center space-x-1.5 bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                <span id="liveDot" class="w-1.5 h-1.5 rounded-full bg-slate-400 live-dot"></span>
+                                <span id="syncStatus" role="status" aria-live="polite">Conectando ao Google Forms</span>
+                                <span id="lastUpdated" class="text-emerald-500/70 font-normal">--:--:--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Abas e Ações -->
+                <div class="flex items-center space-x-3">
+                    <button id="syncButton" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-all flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400" title="Sincronizar agora" aria-label="Sincronizar agora">
+                        <i data-lucide="refresh-cw" id="syncIcon" class="w-4 h-4"></i>
+                    </button>
+
+                    <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800/80">
+                        <button data-tab="presenca" id="tab-presenca" role="tab" aria-selected="true" class="tab-btn active flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white">
+                            <i data-lucide="users" class="w-4 h-4"></i>
+                            <span>Gestão de Presença (<span id="navPresenceCount">110</span>)</span>
+                        </button>
+                        <button data-tab="financeiro" id="tab-financeiro" role="tab" aria-selected="false" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white">
+                            <i data-lucide="pie-chart" class="w-4 h-4"></i>
+                            <span>Orçamento & Custos</span>
+                        </button>
+                        <button data-tab="cronograma" id="tab-cronograma" role="tab" aria-selected="false" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white">
+                            <i data-lucide="calendar" class="w-4 h-4"></i>
+                            <span>Cronograma</span>
+                        </button>
+                        <button data-tab="planilha" id="tab-planilha" role="tab" aria-selected="false" class="tab-btn flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white">
+                            <i data-lucide="table-2" class="w-4 h-4"></i>
+                            <span>Planilha Fonte</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
+
+        <!-- ABA PRESENÇA -->
+        <section id="page-presenca" class="space-y-6">
+            
+            <!-- Cards Métricas -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Registros na Gestão</p>
+                        <h3 class="text-2xl font-black text-white mt-1" id="metricTotal">110</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Respostas + convidados sem resposta</p>
+                    </div>
+                    <div class="bg-sky-500/10 text-sky-400 p-3 rounded-2xl border border-sky-500/20">
+                        <i data-lucide="mail-check" class="w-5 h-5"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Com Hospedagem</p>
+                        <h3 class="text-2xl font-black text-emerald-400 mt-1" id="metricLodging">20</h3>
+                        <p class="text-[11px] text-emerald-500/80 mt-0.5">Pernoite no Hotel (06/11)</p>
+                    </div>
+                    <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-2xl border border-emerald-500/20">
+                        <i data-lucide="bed" class="w-5 h-5"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-indigo-400">Sem Hospedagem</p>
+                        <h3 class="text-2xl font-black text-indigo-400 mt-1" id="metricNoLodging">7</h3>
+                        <p class="text-[11px] text-indigo-500/80 mt-0.5">Apenas evento</p>
+                    </div>
+                    <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-2xl border border-indigo-500/20">
+                        <i data-lucide="user-check" class="w-5 h-5"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-amber-800/40 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Pendentes</p>
+                        <h3 class="text-2xl font-black text-amber-400 mt-1" id="metricPending">83</h3>
+                        <p class="text-[11px] text-amber-500/80 mt-0.5">Aguardando Forms</p>
+                    </div>
+                    <div class="bg-amber-500/10 text-amber-400 p-3 rounded-2xl border border-amber-500/20">
+                        <i data-lucide="clock" class="w-5 h-5"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtros e Busca -->
+            <div class="bg-slate-900 p-4 rounded-2xl border border-slate-800/80 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="relative w-full md:w-96">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                    <input type="search" id="searchInput" placeholder="Buscar nome ou e-mail..." aria-label="Buscar por nome ou e-mail" class="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 transition-all">
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between md:justify-end gap-2 w-full md:w-auto">
+                    <div class="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+                        <button data-filter="all" id="btn-p-all" aria-pressed="true" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-white">Todos (<span id="lblTotal">110</span>)</button>
+                        <button data-filter="hospedagem" id="btn-p-hospedagem" aria-pressed="false" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">Com Hospedagem (<span id="lblLodging">20</span>)</button>
+                        <button data-filter="sem_hospedagem" id="btn-p-sem_hospedagem" aria-pressed="false" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">Sem Hospedagem (<span id="lblNoLodging">7</span>)</button>
+                        <button data-filter="pendente" id="btn-p-pendente" aria-pressed="false" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-400 hover:text-amber-300">Pendentes (<span id="lblPending">83</span>)</button>
+                    </div>
+
+                    <button id="exportButton" class="flex items-center space-x-2 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-sky-600/20">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Exportar planilha CSV</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela -->
+            <div class="bg-slate-900 rounded-2xl border border-slate-800/80 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-[1500px] w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-950/60 border-b border-slate-800 uppercase font-bold text-[10px] tracking-wider text-slate-500">
+                            <tr>
+                                <th class="px-4 py-4">Enviado em</th>
+                                <th class="px-4 py-4">Nome completo / Crachá</th>
+                                <th class="px-4 py-4">E-mail informado</th>
+                                <th class="px-4 py-4">Negócio</th>
+                                <th class="px-4 py-4">Telefone</th>
+                                <th class="px-4 py-4">E-mail corporativo</th>
+                                <th class="px-4 py-4">Gênero</th>
+                                <th class="px-4 py-4">Status</th>
+                                <th class="px-4 py-4">Hospedagem</th>
+                                <th class="px-4 py-4">Detalhe da hospedagem</th>
+                                <th class="px-4 py-4">Camiseta</th>
+                                <th class="px-4 py-4">Dupla / Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="presenceTableBody" class="divide-y divide-slate-800/60 font-medium">
+                            <!-- JS Dinâmico -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-slate-800/80 text-xs text-slate-400">
+                    <p id="resultSummary" aria-live="polite">Carregando presenças...</p>
+                    <div class="flex items-center gap-2 self-end sm:self-auto">
+                        <button id="previousPage" class="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Página anterior">Anterior</button>
+                        <span id="pageSummary" class="min-w-20 text-center">Página 1 de 1</span>
+                        <button id="nextPage" class="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Próxima página">Próxima</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ABA FINANCEIRO -->
+        <section id="page-financeiro" class="space-y-6 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800/80 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Orçamento Aprovado</p>
+                    <h3 class="text-2xl font-black text-white mt-1">R$ 150.000,00</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Budget teto do evento</p>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800/80 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Realizado</p>
+                    <h3 class="text-2xl font-black text-sky-400 mt-1">R$ 151.464,48</h3>
+                    <p class="text-[11px] text-rose-400 font-semibold mt-1">Variação: +0.98%</p>
+                </div>
+                <div class="bg-emerald-950/30 p-5 rounded-2xl border border-emerald-800/50 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Reservado (Certo)</p>
+                    <h3 class="text-2xl font-black text-emerald-400 mt-1">R$ 82.265,00</h3>
+                    <p class="text-[11px] text-emerald-500/80 mt-1">54,3% contratado</p>
+                </div>
+                <div class="bg-amber-950/30 p-5 rounded-2xl border border-amber-800/50 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Pendente</p>
+                    <h3 class="text-2xl font-black text-amber-400 mt-1">R$ 69.199,48</h3>
+                    <p class="text-[11px] text-amber-500/80 mt-1">45,7% em aprovação</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800/80 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Distribuição dos Investimentos</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Aporte financeiro por categoria</p>
+                    </div>
+                    <div class="relative my-4 flex items-center justify-center h-52">
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+                    <p class="text-center text-xs text-slate-400 font-medium">
+                        Maior peso orçamentário em <span class="font-bold text-white">Audiovisual (31.5%)</span> e <span class="font-bold text-white">Alimentação (23%)</span>.
+                    </p>
+                </div>
+
+                <div class="lg:col-span-2 bg-slate-900 rounded-2xl border border-slate-800/80 shadow-sm overflow-hidden flex flex-col justify-between">
+                    <div class="p-5 border-b border-slate-800">
+                        <h3 class="text-sm font-bold text-white">Detalhamento Orçamentário - Hotel Vitória</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="bg-slate-950/60 border-b border-slate-800 uppercase font-bold text-[10px] tracking-wider text-slate-500">
+                                <tr>
+                                    <th class="px-6 py-3.5">Item / Descrição</th>
+                                    <th class="px-6 py-3.5">Orçado</th>
+                                    <th class="px-6 py-3.5">Realizado</th>
+                                    <th class="px-6 py-3.5">Status</th>
+                                    <th class="px-6 py-3.5">Responsável</th>
+                                </tr>
+                            </thead>
+                            <tbody id="budgetTableBody" class="divide-y divide-slate-800/60 font-medium">
+                                <!-- Inserido por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA CRONOGRAMA -->
+        <section id="page-cronograma" class="space-y-6 hidden">
+            <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800/80 shadow-sm">
+                <div class="flex items-center justify-between pb-6 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base font-bold text-white">Programação Oficial do Evento</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Hotel Vitória Convention Indaiatuba • 06 e 07 de Novembro</p>
+                    </div>
+                    <span class="px-3 py-1 bg-sky-500/10 text-sky-400 text-xs font-bold rounded-full border border-sky-500/20">2 Dias</span>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6 text-xs text-slate-300">
+                    <div>
+                        <h3 class="font-bold text-sky-400 mb-3">Dia 1 • 06/11 (Sexta-feira)</h3>
+                        <ul class="space-y-2 border-l-2 border-slate-800 pl-4">
+                            <li><b class="text-white">13:30</b> - Welcome Coffee & Credenciamento</li>
+                            <li><b class="text-white">14:00</b> - Abertura Oficial (Fábio Ambiel / Adriano Pechio)</li>
+                            <li><b class="text-white">14:15</b> - Análise Mercado Externo (Valdir Recalde)</li>
+                            <li><b class="text-white">15:00</b> - Análise Grupo Base (Adriano Pechio)</li>
+                            <li><b class="text-white">15:40</b> - PAINEL 1: Discussão Comercial</li>
+                            <li><b class="text-white">16:20</b> - Apresentação Técnica (Soluções Alphapiso)</li>
+                            <li><b class="text-purple-400">19:00</b> - Happy Hour & Jantar de Confraternização (Bar da Piscina)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-emerald-400 mb-3">Dia 2 • 07/11 (Sábado)</h3>
+                        <ul class="space-y-2 border-l-2 border-slate-800 pl-4">
+                            <li><b class="text-white">09:00</b> - Abertura do 2º Dia</li>
+                            <li><b class="text-white">09:50</b> - Palestra Magna (WALNEY - 60 min)</li>
+                            <li><b class="text-white">10:50</b> - Cerimônia de Reconhecimento Destaques 2026</li>
+                            <li><b class="text-white">11:20</b> - Sorteio de Prêmios</li>
+                            <li><b class="text-white">11:35</b> - Encerramento Oficial & Exibição do Vídeo</li>
+                            <li><b class="text-emerald-400">12:30</b> - Almoço de Encerramento (Restaurante Vick)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-planilha" class="hidden space-y-4" aria-label="Planilha original">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-white">Planilha Fonte</h2>
+                    <p class="text-xs text-slate-400 mt-1">Visualização publicada da planilha de respostas.</p>
+                </div>
+                <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vRgEuNnmETcuMt1BrMtTHavfvoi8NavY0MEkFtBYdDB_pqW-p1pZTutXb7ipmjeWZPGYrOJlMWHle8m/pubhtml" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs font-semibold text-sky-400 hover:text-sky-300">Abrir em nova aba</a>
+            </div>
+            <iframe title="Planilha publicada de respostas da Convenção 2026" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vRgEuNnmETcuMt1BrMtTHavfvoi8NavY0MEkFtBYdDB_pqW-p1pZTutXb7ipmjeWZPGYrOJlMWHle8m/pubhtml?widget=true&amp;headers=false" class="w-full h-[650px] border-0 rounded-2xl bg-slate-900" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
+        <p>Convenção de Vendas 2026 • Grupo Base (Concrebase | Extrabase | Sobase)</p>
+    </footer>
+
+    <!-- JavaScript Integrado com Google Sheets e Pré-carregado -->
+    <script>
+        (() => {
+        // Link CSV do seu Google Sheets (vinculado ao seu pubhtml)
+        const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgEuNnmETcuMt1BrMtTHavfvoi8NavY0MEkFtBYdDB_pqW-p1pZTutXb7ipmjeWZPGYrOJlMWHle8m/pub?output=csv";
+        const CSV_SOURCE_URLS = [
+            { label: 'Servidor do Dashboard', url: '/api/responses', sameOrigin: true },
+            { label: 'Google Sheets', url: GOOGLE_SHEETS_CSV_URL },
+            { label: 'Proxy CORS 1', url: `https://api.corsproxy.io/?url=${encodeURIComponent(GOOGLE_SHEETS_CSV_URL)}` },
+            { label: 'Proxy CORS 2', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(GOOGLE_SHEETS_CSV_URL)}` }
+        ];
+
+        // Lista Base de 110 Convidados
+        const rawInvitedList = [
+            { name: "Patricia de Carvalho pereira Marques", email: "patricia.marques@concrebase.com.br" },
+            { name: "Katia Oliveira", email: "katia.vendas@concrebase.com.br" },
+            { name: "José Pedro", email: "zepedro@concrebase.com.br" },
+            { name: "Willian Pinheiro Ramos", email: "willian.ramos@concrebase.com.br" },
+            { name: "Clauber Fabiano nabas", email: "clauber.vendas@concrebase.com.br" },
+            { name: "Jose Pinheiro", email: "jose.pinheiro@concrebase.com.br" },
+            { name: "Maiquel Vendas", email: "maiquel.vendas@concrebase.com.br" },
+            { name: "Eduardo Vendas", email: "eduardo.vendas@concrebase.com.br" },
+            { name: "Ismael Vendas", email: "ismael.vendas@concrebase.com.br" },
+            { name: "Paulo Oliveira", email: "paulooliveira.vendas@concrebase.com.br" },
+            { name: "Gerson Fernando Bezerra", email: "gerson.bezerra@gbase.com.br" },
+            { name: "Thiago Prieto", email: "thiagoprieto.vendas@concrebase.com.br" },
+            { name: "Edson Vendas", email: "edson.vendas@concrebase.com.br" },
+            { name: "Joao Vendas", email: "joao.vendas@concrebase.com.br" },
+            { name: "Patricia Canalle", email: "patricia.vendas@concrebase.com.br" },
+            { name: "Jorge Vendas", email: "jorge.vendas@concrebase.com.br" },
+            { name: "Alexandre Leandro", email: "alexandreleandro.vendas@concrebase.com.br" },
+            { name: "Sirlei Aparecida de Almeida Santos", email: "sirlei.santos@gbase.com.br" },
+            { name: "Sheila Franco Sil", email: "sheila.franco@concrebase.com.br" },
+            { name: "Paulocesar Vendas", email: "paulocesar.vendas@concrebase.com.br" },
+            { name: "JOSEMAR RODRIGUES DE ALMEIDA", email: "josemar.almeida@concrebase.com.br" },
+            { name: "Fernando Ricardo Camargo", email: "fernandocamargo.vendas@concrebase.com.br" },
+            { name: "Marcio Rogerio de Lima Nogueira", email: "marcio.nogueira@concrebase.com.br" },
+            { name: "LEANDRO CEZARINI VIEIRA", email: "leandro.vieira@concrebase.com.br" },
+            { name: "David Henrique Paz", email: "david.vendas@concrebase.com.br" },
+            { name: "Edeval Vendas", email: "edeval.vendas@concrebase.com.br" },
+            { name: "Andre Vendas", email: "andre.vendas@concrebase.com.br" },
+            { name: "Douglas Marani", email: "douglas.marani@extrabase.com.br" },
+            { name: "João Marcos Bueno", email: "joao.bueno@concrebase.com.br" },
+            { name: "José Fernando", email: "josefernando.vendas@concrebase.com.br", emailAliases: ["jose.fernando.vendas@concrebase.com.br"] },
+            { name: "Sidouglas Vendas", email: "sidouglas.vendas@concrebase.com.br" },
+            { name: "IDÁRIO SOUZA", email: "idario.souza@concrebase.com.br" },
+            { name: "Hamilton Vendas", email: "hamilton.vendas@concrebase.com.br" },
+            { name: "Claudinei Vendas", email: "claudinei.vendas@sobase.com.br" },
+            { name: "Jovandro Wellington do Nascimento Lima", email: "jovandro.lima@concrebase.com.br" },
+            { name: "Marinalva Carlos Soares", email: "marinalva.vendas@concrebase.com.br", emailAliases: ["marinalva.vendas@gbase.com.br"] },
+            { name: "Paulo Silva", email: "joao.pizani@concrebase.com.br" },
+            { name: "Tatiane Cristina Hildebrand Bucinelli", email: "tatiane.bucinelli@concrebase.com.br" },
+            { name: "Joel Carlos Barbosa De Souza", email: "joel.souza@concrebase.com.br" },
+            { name: "Luis Vendas", email: "luis.vendas@concrebase.com.br" },
+            { name: "Thiago Consultor Comercial", email: "thiago.vendas@concrebase.com.br" },
+            { name: "Nathalia Ghise Granato Berto", email: "nathalia.berto@concrebase.com.br" },
+            { name: "Douglas Concrebase", email: "douglas.vendas@concrebase.com.br" },
+            { name: "Nodinei Vendas", email: "nodinei.vendas@concrebase.com.br" },
+            { name: "Marcos Pereira", email: "mapereira.vendas@concrebase.com.br" },
+            { name: "Jorge Beraldo", email: "jorgeberaldo.vendas@concrebase.com.br" },
+            { name: "Adriano Travaglia Francato", email: "adriano.francato@concrebase.com.br" },
+            { name: "Paulo Vendas", email: "paulo.vendas@concrebase.com.br" },
+            { name: "Roberto Augusto Martin Assumpção", email: "roberto.martin@concrebase.com.br" },
+            { name: "Daniel Nalin", email: "danielnalin.vendas@concrebase.com.br" },
+            { name: "Thiago Bussaglia", email: "thiago.bussaglia@concrebase.com.br" },
+            { name: "Jonas Willian Pessan", email: "jonas.vendas@concrebase.com.br", emailAliases: ["jonaspessan.vendas@concrebase.com.br"] },
+            { name: "Marcelo Andreoli", email: "m.andreoli@concrebase.com.br" },
+            { name: "Willian Dias Furquim", email: "willian.vendas@concrebase.com.br" },
+            { name: "João Victor Estanagel Albuquerque", email: "joaoestanagel.vendas@concrebase.com.br" },
+            { name: "Giovani Correa Garcia", email: "giovani.vendas@concrebase.com.br" },
+            { name: "Brunot Vendas", email: "brunot.vendas@concrebase.com.br" },
+            { name: "Claudio Jose", email: "claudio.vendas@concrebase.com.br" },
+            { name: "Layla Thiaya Jesus Dantas de Amorim", email: "layla.dantas@concrebase.com.br" },
+            { name: "Jeferson do Espírito Santo Souza", email: "jeferson.souza@concrebase.com.br" },
+            { name: "Luciana Aparecida da Silva", email: "luciana.silva@concrebase.com.br" },
+            { name: "Sheila Oliveira", email: "sheila.oliveira@concrebase.com.br" },
+            { name: "Ely Fontoura de Oliveira Júnior", email: "ely.vendas@concrebase.com.br" },
+            { name: "Antonio Carlos dos Santos Ferraz", email: "antoniocarlos.vendas@concrebase.com.br" },
+            { name: "Alexandre Mauricio Barboza", email: "alexandre.barboza@concrebase.com.br" },
+            { name: "Claude Denis Nahas", email: "claude.nahas@concrebase.com.br" },
+            { name: "Flavio Ferreira Barbosa", email: "flavio.barbosa@concrebase.com.br" },
+            { name: "Lucas Correia Gasparino", email: "lucas.gasparino@concrebase.com.br" },
+            { name: "Jose Gustavo", email: "josegustavo.vendas@concrebase.com.br" },
+            { name: "LUCIANO BISPO MANDINGA", email: "luciano.mandinga@concrebase.com.br" },
+            { name: "Bruno Alexandre de Paula", email: "brunoalexandre.vendas@concrebase.com.br" },
+            { name: "Heriberto Gomes da Silva", email: "heriberto.silva@concrebase.com.br" },
+            { name: "Bruna Menezes", email: "bruna.menezes@gbase.com.br" },
+            { name: "Fabio Miguel Ifanger", email: "fabio.ifanger@gbase.com.br" },
+            { name: "Caroline Cardoso", email: "caroline.cardoso@gbase.com.br" },
+            { name: "Giovanne Oliveira", email: "giovanne.silva@gbase.com.br" },
+            { name: "Paulo Silva", email: "paulo.silva@concrebase.com.br" },
+            { name: "Jefferson José Zago", email: "jefferson.zago@gbase.com.br" },
+            { name: "Eduardo Gonçalves", email: "eduardo.goncalves@gbase.com.br" },
+            { name: "Daniel Soares e Silva", email: "daniel.vendas@concrebase.com.br" },
+            { name: "Adriano Pechio", email: "adrianopechio@gbase.com.br" },
+            { name: "Edson Pechio", email: "pechio@gbase.com.br" },
+            { name: "Michelle Francischinelli", email: "michelle.francischinelli@gbase.com.br" },
+            { name: "Felipe Novak", email: "felipe.novak@gbase.com.br" },
+            { name: "Fernando Nogueira", email: "fernando.nogueira@concrebase.com.br" },
+            { name: "Jean Marcelo Fernandes Souto", email: "jean.souto@gbase.com.br" },
+            { name: "Ederson Contessotto", email: "ederson.manutencao@concrebase.com.br" },
+            { name: "João Amancio", email: "joaocarlos@gbase.com.br" },
+            { name: "Andre", email: "andre@loop4.io" },
+            { name: "Ruy Casale", email: "ruy.casale@gbase.com.br" },
+            { name: "Wseixas", email: "wseixas@loop4.com.br" },
+            { name: "Claudemir Vendas", email: "claudemir.vendas@sobase.com.br" },
+            { name: "Marcos Henrique Pompeu", email: "marcos.pompeu@sobase.com.br" },
+            { name: "Juliana Lisboa", email: "juliana.lisboa@sobase.com.br" },
+            { name: "Henrique Nascimento Silva", email: "henrique.silva@sobase.com.br" },
+            { name: "Elizangela Saraiva", email: "elizangela.vendas@sobase.com.br" },
+            { name: "Lucas Brito", email: "lucas.vendas@sobase.com.br" },
+            { name: "Altir Mendes", email: "altirmendes@gmail.com" },
+            { name: "Wilton Vendas", email: "wilton.vendas@extrabase.com.br" },
+            { name: "Luciano Fonseca", email: "luciano.fonseca@extrabase.com.br" },
+            { name: "Odair Gaspar", email: "odair.silva@extrabase.com.br", emailAliases: ["odair.gaspars@gmail.com", "odair.gaspar@extrabase.com.br"] },
+            { name: "Douglas Marani", email: "douglas.marani@concrebase.com.br" },
+            { name: "Marco Antonio Peres", email: "marcos.peres@minermixmineracao.com.br" },
+            { name: "Celso Junior", email: "celso.vendas@extrabase.com.br" },
+            { name: "Claudinei Messias", email: "claudinei@gbase.com.br", emailAliases: ["claudinei@extrabase.com.br"] },
+            { name: "Diogo Peres", email: "diogo.peres@extrabase.com.br" },
+            { name: "Rodolfo Testa", email: "rodolfo.testa@extrabase.com.br" },
+            { name: "Carlos Moura", email: "carlos.moura@sobase.com.br" },
+            { name: "Josemar Rodrigues", email: "josemar.rodrigues@gbase.com.br" },
+            { name: "Janaina Alves de Morais", email: "janaina.morais@gbase.com.br" }
+        ];
+
+        // 27 Respostas já Confirmadas do Forms (Pré-carregadas)
+        const initialRespondedList = [
+            // Confirmaram COM Hospedagem (20)
+            { email: "giovanne.silva@gbase.com.br", status: "SIM", size: "XG", room: "Sozinho" },
+            { email: "caroline.cardoso@gbase.com.br", status: "SIM", size: "GG", room: "Ninguém" },
+            { email: "bruna.menezes@gbase.com.br", status: "SIM", size: "M", room: "Caroline Cardoso" },
+            { email: "layla.dantas@concrebase.com.br", status: "SIM", size: "M", room: "Patrícia Marques" },
+            { email: "alexandre.barboza@concrebase.com.br", status: "SIM", size: "M", room: "Sem preferências" },
+            { email: "jose.fernando.vendas@concrebase.com.br", status: "SIM", size: "G", room: "Pessoa não fumante" },
+            { email: "luciana.silva@concrebase.com.br", status: "SIM", size: "M", room: "Sem preferência" },
+            { email: "antoniocarlos.vendas@concrebase.com.br", status: "SIM", size: "G", room: "Não informou" },
+            { email: "sirlei.santos@gbase.com.br", status: "SIM", size: "M", room: "Bruna Menezes" },
+            { email: "daniel.vendas@concrebase.com.br", status: "SIM", size: "GG", room: "Jeferson Souza" },
+            { email: "jeferson.souza@concrebase.com.br", status: "SIM", size: "G", room: "Daniel Soares e Silva" },
+            { email: "eduardo.goncalves@gbase.com.br", status: "SIM", size: "G", room: "Fabiano Nabas" },
+            { email: "joaoestanagel.vendas@concrebase.com.br", status: "SIM", size: "M", room: "Willian Dias" },
+            { email: "willian.vendas@concrebase.com.br", status: "SIM", size: "G", room: "João Victor Estanagel" },
+            { email: "felipe.novak@gbase.com.br", status: "SIM", size: "GG", room: "Fernando Nogueira" },
+            { email: "paulo.silva@concrebase.com.br", status: "SIM", size: "M", room: "Edson Pechio" },
+            { email: "fernando.nogueira@concrebase.com.br", status: "SIM", size: "G", room: "Felipe Novak" },
+            { email: "gerson.bezerra@gbase.com.br", status: "SIM", size: "G", room: "Não informou" },
+            { email: "pechio@gbase.com.br", status: "SIM", size: "GG", room: "Paulo Silva" },
+            { email: "michelle.francischinelli@gbase.com.br", status: "SIM", size: "M", room: "Equipe Mkt" },
+
+            // Responderam SEM Hospedagem / Apenas Evento (7)
+            { email: "fabio.ifanger@gbase.com.br", status: "NAO", size: "G", room: "-" },
+            { email: "marcos.pompeu@sobase.com.br", status: "NAO", size: "GG", room: "-" },
+            { email: "katia.vendas@concrebase.com.br", status: "NAO", size: "G", room: "-" },
+            { email: "willian.ramos@concrebase.com.br", status: "NAO", size: "M", room: "-" },
+            { email: "claudinei@gbase.com.br", status: "NAO", size: "M", room: "-" },
+            { email: "adrianopechio@gbase.com.br", status: "NAO", size: "G", room: "-" },
+            { email: "ruy.casale@gbase.com.br", status: "NAO", size: "GG", room: "-" }
+        ];
+
+        // Orçamento Detalhado
+        const budgetData = [
+            { item: "Hospedagem (Duplo)", orcado: 20825.00, realizado: 20825.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Happy Hour + Jantar", orcado: 15050.00, realizado: 15050.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Bebidas Confraternização", orcado: 8540.00, realizado: 8540.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Almoço Encerramento (07/11)", orcado: 8750.00, realizado: 8750.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Coffee Break 1", orcado: 2520.00, realizado: 2520.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Aluguel de Salas/Auditório", orcado: 9200.00, realizado: 9200.00, status: "Reservado", resp: "Vitória Hotel" },
+            { item: "Filmagem & Foto (Julio Dias)", orcado: 8200.00, realizado: 8200.00, status: "Reservado", resp: "Julio Dias" },
+            { item: "Audiovisual & Iluminação", orcado: 44890.00, realizado: 47850.00, status: "Aguardando", resp: "Saga Eventos" },
+            { item: "Ambientação / Decoração", orcado: 13000.00, realizado: 13000.00, status: "Pendente", resp: "Vida Florida" },
+            { item: "Kits / Brindes (Camisetas)", orcado: 3880.00, realizado: 4775.00, status: "Pendente", resp: "Giovanne" },
+            { item: "Credenciais & Crachás", orcado: 330.00, realizado: 330.00, status: "Pendente", resp: "Giovanne" },
+            { item: "Premiação / Troféus Destaque", orcado: 10000.00, realizado: 12372.48, status: "Pendente", resp: "Fábio / Bruna" },
+            { item: "Banda / Atração Musical", orcado: 1500.00, realizado: 0.00, status: "Pendente", resp: "Marketing" }
+        ];
+
+        let fullPresenceList = [];
+        let currentPresenceFilter = 'all';
+        let currentPage = 1;
+        const pageSize = 15;
+        let isSyncing = false;
+        let lastSyncError = '';
+
+        function setConnectionStatus(mode, title = '') {
+            const badge = document.getElementById('connectionBadge');
+            const syncStatus = document.getElementById('syncStatus');
+            const liveDot = document.getElementById('liveDot');
+            const styles = {
+                loading: { label: 'Sincronizando...', color: 'sky', badge: 'bg-sky-500/10 text-sky-300 border-sky-500/20' },
+                online: { label: 'Sincronizado via Google Sheets', color: 'emerald', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+                offline: { label: 'Modo de Reserva (Offline)', color: 'amber', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20' }
+            }[mode];
+
+            syncStatus.textContent = styles.label;
+            syncStatus.className = '';
+            badge.className = `flex items-center space-x-1.5 ${styles.badge} border px-2 py-0.5 rounded-full text-[10px] font-bold`;
+            liveDot.className = `w-1.5 h-1.5 rounded-full bg-${styles.color}-400 live-dot`;
+            badge.title = title;
+        }
+
+        async function fetchCSVFromSources() {
+            const failures = [];
+
+            for (const source of CSV_SOURCE_URLS) {
+                const controller = new AbortController();
+                const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+                try {
+                    const response = await fetch(source.url, {
+                        cache: 'no-store',
+                        signal: controller.signal
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const csvText = await response.text();
+                    if (/^\s*</.test(csvText)) throw new Error('A resposta não é CSV.');
+                    const responses = parseCSV(csvText);
+                    if (responses.length === 0) throw new Error('CSV sem respostas válidas.');
+                    return {
+                        responses,
+                        source: source.label,
+                        stale: response.headers.get('X-Data-Stale') === 'true',
+                        lastSuccessfulSync: response.headers.get('X-Last-Successful-Sync')
+                    };
+                } catch (error) {
+                    failures.push(`${source.label}: ${error.name === 'AbortError' ? 'tempo limite' : error.message}`);
+                } finally {
+                    window.clearTimeout(timeoutId);
+                }
+            }
+
+            throw new Error(failures.join(' | '));
+        }
+
+        async function fetchFromGoogleSheets(isManual = false) {
+            if (isSyncing) return;
+            isSyncing = true;
+            const syncIcon = document.getElementById('syncIcon');
+            const syncButton = document.getElementById('syncButton');
+            syncIcon?.classList.add('animate-spin');
+            syncButton?.setAttribute('disabled', 'true');
+            setConnectionStatus('loading');
+
+            try {
+                const result = await fetchCSVFromSources();
+                mergeResponses(result.responses);
+                lastSyncError = '';
+                if (result.stale) {
+                    setConnectionStatus('offline', 'Google Sheets indisponível; exibindo a última cópia sincronizada pelo servidor.');
+                } else {
+                    setConnectionStatus('online', `Fonte: ${result.source}`);
+                }
+                const lastUpdated = document.getElementById('lastUpdated');
+                lastUpdated.textContent = result.lastSuccessfulSync
+                    ? new Date(result.lastSuccessfulSync).toLocaleTimeString('pt-BR')
+                    : new Date().toLocaleTimeString('pt-BR');
+                lastUpdated.className = result.stale ? 'text-amber-500/80 font-normal' : 'text-emerald-500/70 font-normal';
+            } catch (error) {
+                console.warn('Google Sheets indisponível; usando respostas pré-carregadas.', error);
+                mergeResponses(getOfflineResponses());
+                lastSyncError = '';
+                setConnectionStatus('offline', `Dados locais. Falhas: ${error.message}`);
+                const lastUpdated = document.getElementById('lastUpdated');
+                lastUpdated.textContent = 'Offline';
+                lastUpdated.className = 'text-amber-500/80 font-normal';
+            } finally {
+                syncIcon?.classList.remove('animate-spin');
+                syncButton?.removeAttribute('disabled');
+                isSyncing = false;
+                renderPresenceTable();
+                renderBudgetTable();
+            }
+        }
+
+        function parseCSV(text) {
+            if (!window.Papa) throw new Error('PapaParse não foi carregado.');
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+            if (parsed.errors.length) throw new Error(`CSV inválido: ${parsed.errors[0].message}`);
+            const fields = parsed.meta.fields || [];
+            const valueAt = (record, index) => String(record[fields[index]] || '').trim();
+
+            return parsed.data.flatMap(record => {
+                if (!Object.values(record).some(value => String(value).trim())) return [];
+                const lodgingAnswer = valueAt(record, 9);
+                const lodgingDetail = valueAt(record, 10);
+                const statusValue = `${lodgingAnswer} ${lodgingDetail}`.toLocaleUpperCase('pt-BR');
+                const normalizedStatus = statusValue.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const status = /\bSIM\b/.test(normalizedStatus) ? 'SIM'
+                    : /\bNAO\b|\bNO\b/.test(normalizedStatus) ? 'NAO' : 'PENDENTE';
+
+                return [{
+                    timestamp: valueAt(record, 0),
+                    email: valueAt(record, 1).toLowerCase(),
+                    company: valueAt(record, 2),
+                    fullName: valueAt(record, 3),
+                    badgeName: valueAt(record, 4),
+                    phone: valueAt(record, 5),
+                    corporateEmail: valueAt(record, 6),
+                    gender: valueAt(record, 7),
+                    size: valueAt(record, 8),
+                    status,
+                    lodgingAnswer,
+                    lodgingDetail,
+                    room: valueAt(record, 11)
+                }];
+            });
+        }
+
+        function getOfflineResponses() {
+            return initialRespondedList.map(response => {
+                const responseEmail = response.email.trim().toLowerCase();
+                const invited = rawInvitedList.find(person => [
+                    person.email,
+                    ...(person.emailAliases || [])
+                ].some(email => email.toLowerCase() === responseEmail));
+                return {
+                    ...response,
+                    timestamp: '',
+                    company: invited ? getCompanyFromEmail(invited.email) : getCompanyFromEmail(response.email),
+                    fullName: invited?.name || '',
+                    badgeName: invited?.name || '',
+                    phone: '',
+                    corporateEmail: response.email,
+                    gender: '',
+                    lodgingAnswer: response.status === 'SIM' ? 'SIM' : 'NÃO',
+                    lodgingDetail: '',
+                    isOffline: true
+                };
+            });
+        }
+
+        function getResponseTimestampValue(timestamp) {
+            const value = String(timestamp || '').trim();
+            const localTimestamp = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+            if (localTimestamp) {
+                const [, day, month, year, hour, minute, second] = localTimestamp.map(Number);
+                const date = new Date(year, month - 1, day, hour, minute, second);
+                if (date.getFullYear() === year
+                    && date.getMonth() === month - 1
+                    && date.getDate() === day
+                    && date.getHours() === hour
+                    && date.getMinutes() === minute
+                    && date.getSeconds() === second) {
+                    return date.getTime();
+                }
+                return null;
+            }
+
+            const parsedTimestamp = Date.parse(value);
+            return Number.isNaN(parsedTimestamp) ? null : parsedTimestamp;
+        }
+
+        function mergeResponses(responses) {
+            const normalizeEmail = value => (value || '').trim().toLowerCase();
+            const invitedByEmail = new Map();
+            rawInvitedList.forEach((person, index) => {
+                const invited = { ...person, inviteIndex: index };
+                invitedByEmail.set(normalizeEmail(person.email), invited);
+                (person.emailAliases || []).forEach(alias => {
+                    invitedByEmail.set(normalizeEmail(alias), invited);
+                });
+            });
+            const latestResponsesByPerson = new Map();
+            responses.forEach((response, index) => {
+                const respondentEmail = normalizeEmail(response.email);
+                const corporateEmail = normalizeEmail(response.corporateEmail);
+                const invited = invitedByEmail.get(respondentEmail) || invitedByEmail.get(corporateEmail);
+                const responseKey = invited
+                    ? `invite:${invited.inviteIndex}`
+                    : `email:${respondentEmail || corporateEmail || `row:${index}`}`;
+                const timestampValue = getResponseTimestampValue(response.timestamp);
+                const current = latestResponsesByPerson.get(responseKey);
+                if (!current
+                    || (timestampValue !== null && (current.timestampValue === null || timestampValue > current.timestampValue))
+                    || (timestampValue === current.timestampValue && index > current.index)) {
+                    latestResponsesByPerson.set(responseKey, { response, invited, timestampValue, index });
+                }
+            });
+
+            const answeredInviteIndexes = new Set();
+            const submittedRows = [...latestResponsesByPerson.values()]
+                .sort((left, right) => {
+                    const leftTimestamp = left.timestampValue ?? Number.NEGATIVE_INFINITY;
+                    const rightTimestamp = right.timestampValue ?? Number.NEGATIVE_INFINITY;
+                    return rightTimestamp - leftTimestamp || right.index - left.index;
+                })
+                .map(({ response, invited }) => {
+                    const respondentEmail = normalizeEmail(response.email);
+                    const corporateEmail = normalizeEmail(response.corporateEmail);
+                    if (invited) answeredInviteIndexes.add(invited.inviteIndex);
+
+                    return {
+                        ...response,
+                        name: response.fullName || response.badgeName || invited?.name || respondentEmail || 'Resposta sem nome',
+                        email: response.email || invited?.email || '',
+                        company: response.company || (invited ? getCompanyFromEmail(invited.email) : getCompanyFromEmail(corporateEmail)),
+                        state: response.status,
+                        isResponse: true,
+                        isInvited: Boolean(invited)
+                    };
+                });
+            const pendingRows = rawInvitedList.flatMap((invited, inviteIndex) => {
+                if (answeredInviteIndexes.has(inviteIndex)) return [];
+                return [{
+                    timestamp: '',
+                    name: invited.name,
+                    fullName: invited.name,
+                    badgeName: '',
+                    email: invited.email,
+                    company: getCompanyFromEmail(invited.email),
+                    phone: '',
+                    corporateEmail: invited.email,
+                    gender: '',
+                    state: 'PENDENTE',
+                    lodgingAnswer: '',
+                    lodgingDetail: '',
+                    size: '',
+                    room: '',
+                    isResponse: false,
+                    isInvited: true
+                }];
+            });
+            fullPresenceList = [...submittedRows, ...pendingRows];
+
+            document.getElementById('metricTotal').textContent = fullPresenceList.length;
+            document.getElementById('navPresenceCount').textContent = fullPresenceList.length;
+            const lodging = fullPresenceList.filter(r => r.state === 'SIM').length;
+            const noLodging = fullPresenceList.filter(r => r.state === 'NAO').length;
+            const pending = fullPresenceList.filter(r => !r.isResponse).length;
+
+            document.getElementById('metricLodging').innerText = lodging;
+            document.getElementById('metricNoLodging').innerText = noLodging;
+            document.getElementById('metricPending').innerText = pending;
+
+            document.getElementById('lblLodging').innerText = lodging;
+            document.getElementById('lblNoLodging').innerText = noLodging;
+            document.getElementById('lblPending').innerText = pending;
+            document.getElementById('lblTotal').textContent = fullPresenceList.length;
+        }
+
+        function getCompanyFromEmail(email) {
+            if(email.includes('gbase')) return 'GBASE';
+            if(email.includes('concrebase')) return 'CONCREBASE';
+            if(email.includes('sobase')) return 'SOBASE';
+            if(email.includes('extrabase')) return 'EXTRABASE';
+            return 'GRUPO BASE';
+        }
+
+        function escapeHTML(value) {
+            return String(value ?? '').replace(/[&<>"']/g, character => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[character]);
+        }
+
+        function renderPresenceTable() {
+            const tbody = document.getElementById('presenceTableBody');
+            const query = document.getElementById('searchInput').value.trim().toLocaleLowerCase('pt-BR');
+            const filtered = fullPresenceList.filter(person => {
+                const matchesFilter = currentPresenceFilter === 'all'
+                    || (currentPresenceFilter === 'hospedagem' && person.state === 'SIM')
+                    || (currentPresenceFilter === 'sem_hospedagem' && person.state === 'NAO')
+                    || (currentPresenceFilter === 'pendente' && !person.isResponse);
+                const matchesQuery = Object.values(person).join(' ').toLocaleLowerCase('pt-BR').includes(query);
+                return matchesFilter && matchesQuery;
+            });
+            const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+            currentPage = Math.min(currentPage, pageCount);
+            const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+            const stateLabels = {
+                SIM: 'Confirmado • com hospedagem',
+                NAO: 'Confirmado • apenas evento',
+                PENDENTE: 'Resposta recebida • hospedagem não informada'
+            };
+            const badgeStyles = {
+                SIM: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                NAO: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+                PENDENTE: 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+            };
+
+            tbody.innerHTML = pageRows.length ? pageRows.map(person => {
+                const badgeLabel = !person.isInvited
+                    ? 'Resposta fora da lista enviada'
+                    : person.isResponse
+                        ? stateLabels[person.state] || 'Resposta recebida'
+                        : 'Não confirmado';
+                const value = (field, fallback = '-') => escapeHTML(person[field] || fallback);
+                return `<tr class="hover:bg-slate-800/40 transition-colors align-top">
+                    <td class="px-4 py-3.5 whitespace-nowrap text-slate-400">${value('timestamp')}</td>
+                    <td class="px-4 py-3.5 min-w-52"><div class="font-bold text-slate-100">${value('fullName', person.name)}</div><div class="text-[11px] text-slate-500">Crachá: ${value('badgeName')}</div></td>
+                    <td class="px-4 py-3.5 text-slate-300">${value('email')}</td>
+                    <td class="px-4 py-3.5 font-semibold text-slate-300">${value('company')}</td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-slate-300">${value('phone')}</td>
+                    <td class="px-4 py-3.5 text-slate-300">${value('corporateEmail')}</td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-slate-300">${value('gender')}</td>
+                    <td class="px-4 py-3.5 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyles[person.state]}">${badgeLabel}</span></td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-slate-300">${value('lodgingAnswer')}</td>
+                    <td class="px-4 py-3.5 min-w-48 text-slate-400">${value('lodgingDetail')}</td>
+                    <td class="px-4 py-3.5 text-center text-slate-300">${value('size')}</td>
+                    <td class="px-4 py-3.5 min-w-48 text-slate-400">${value('room')}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="12" class="px-6 py-12 text-center text-slate-500">Nenhuma presença encontrada para esta busca.</td></tr>';
+
+            document.getElementById('resultSummary').textContent = `${filtered.length} resultado${filtered.length === 1 ? '' : 's'}${query ? ` para “${query}”` : ''}${lastSyncError ? `. Falha na última sincronização: ${lastSyncError}` : ''}`;
+            document.getElementById('pageSummary').textContent = `Página ${currentPage} de ${pageCount}`;
+            document.getElementById('previousPage').disabled = currentPage <= 1;
+            document.getElementById('nextPage').disabled = currentPage >= pageCount;
+            lucide.createIcons();
+        }
+
+        function renderBudgetTable() {
+            const tbody = document.getElementById('budgetTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            budgetData.forEach(b => {
+                const statusTag = b.status === 'Reservado'
+                    ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Reservado (Certo)</span>`
+                    : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">${b.status}</span>`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-800/40 transition-colors">
+                        <td class="px-6 py-3.5 font-semibold text-slate-100">${b.item}</td>
+                        <td class="px-6 py-3.5 text-slate-400">R$ ${b.orcado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3.5 font-bold text-white">R$ ${b.realizado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td class="px-6 py-3.5">${statusTag}</td>
+                        <td class="px-6 py-3.5 text-slate-400 font-medium">${b.resp}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        let chartInstance = null;
+        function initChart() {
+            if(chartInstance) return;
+            const ctx = document.getElementById('budgetChart');
+            if(!ctx) return;
+            chartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Audiovisual', 'Alimentação & Bebidas', 'Hospedagem', 'Premiações', 'Decoração/Outros'],
+                    datasets: [{
+                        data: [56050, 34860, 20825, 12372, 27357],
+                        backgroundColor: ['#0284c7', '#10b981', '#6366f1', '#f59e0b', '#64748b'],
+                        borderWidth: 3,
+                        borderColor: '#0f172a'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { family: 'Inter', size: 10 },
+                                color: '#94a3b8',
+                                boxWidth: 10,
+                                padding: 12
+                            }
+                        }
+                    },
+                    cutout: '72%'
+                }
+            });
+        }
+
+        function setPresenceFilter(type) {
+            currentPresenceFilter = type;
+            currentPage = 1;
+            document.querySelectorAll('.filter-btn').forEach(button => {
+                const isActive = button.dataset.filter === type;
+                button.setAttribute('aria-pressed', String(isActive));
+                button.classList.remove('bg-slate-800', 'text-white', 'text-slate-400', 'text-amber-400');
+                button.classList.add(isActive ? 'bg-slate-800' : button.dataset.filter === 'pendente' ? 'text-amber-400' : 'text-slate-400');
+                if (isActive) button.classList.add('text-white');
+            });
+            renderPresenceTable();
+        }
+
+        function switchTab(tabId) {
+            ['presenca', 'financeiro', 'cronograma', 'planilha'].forEach(tab => {
+                document.getElementById(`page-${tab}`).classList.add('hidden');
+                const tabButton = document.getElementById(`tab-${tab}`);
+                tabButton.classList.remove('active');
+                tabButton.setAttribute('aria-selected', 'false');
+            });
+
+            document.getElementById(`page-${tabId}`).classList.remove('hidden');
+            const activeTab = document.getElementById(`tab-${tabId}`);
+            activeTab.classList.add('active');
+            activeTab.setAttribute('aria-selected', 'true');
+
+            if(tabId === 'financeiro') {
+                initChart();
+            }
+        }
+
+        function exportToCSV() {
+            const columns = [
+                { label: 'Confirmação da participação', value: person => {
+                    if (!person.isResponse) return 'NÃO CONFIRMOU';
+                    return person.state === 'PENDENTE' ? 'RESPOSTA RECEBIDA - CONFIRMAÇÃO PENDENTE' : 'CONFIRMOU';
+                } },
+                { label: 'Na lista de convidados enviada', value: person => person.isInvited ? 'SIM' : 'NÃO - RESPOSTA FORA DA LISTA' },
+                { label: 'Situação da resposta', value: person => person.isResponse ? 'Respondeu ao formulário' : 'Não respondeu ao formulário' },
+                { label: 'Carimbo de data/hora', key: 'timestamp' },
+                { label: 'E-mail informado', key: 'email' },
+                { label: 'Negócio', key: 'company' },
+                { label: 'Nome completo', key: 'fullName' },
+                { label: 'Nome para o crachá', key: 'badgeName' },
+                { label: 'Telefone', key: 'phone' },
+                { label: 'E-mail corporativo', key: 'corporateEmail' },
+                { label: 'Gênero', key: 'gender' },
+                { label: 'Tamanho da camiseta', key: 'size' },
+                { label: 'Hospedagem / participação', value: person => ({
+                    SIM: 'Com hospedagem',
+                    NAO: 'Apenas evento',
+                    PENDENTE: person.isResponse ? 'Hospedagem não informada' : 'Sem resposta'
+                }[person.state] || 'Não informado') },
+                { label: 'Resposta de hospedagem', key: 'lodgingAnswer' },
+                { label: 'Detalhe de hospedagem', key: 'lodgingDetail' },
+                { label: 'Dupla de quarto / observação', key: 'room' }
+            ];
+            const csvValue = value => {
+                const text = String(value ?? '');
+                const safeText = /^[\u0000-\u0020]*[=+\-@]/.test(text) ? `'${text}` : text;
+                return `"${safeText.replace(/"/g, '""')}"`;
+            };
+            const csv = [
+                columns.map(column => csvValue(column.label)).join(';'),
+                ...fullPresenceList.map(person => columns.map(column => csvValue(
+                    column.value ? column.value(person) : person[column.key]
+                )).join(';'))
+            ].join('\r\n');
+            const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Relatorio_Presenca_Convencao_2026.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            mergeResponses(initialRespondedList);
+            renderPresenceTable();
+            document.getElementById('searchInput').addEventListener('input', () => {
+                currentPage = 1;
+                renderPresenceTable();
+            });
+            document.querySelectorAll('[data-filter]').forEach(button => {
+                button.addEventListener('click', () => setPresenceFilter(button.dataset.filter));
+            });
+            document.querySelectorAll('[data-tab]').forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+            document.getElementById('syncButton').addEventListener('click', () => fetchFromGoogleSheets(true));
+            document.getElementById('exportButton').addEventListener('click', exportToCSV);
+            document.getElementById('previousPage').addEventListener('click', () => {
+                currentPage = Math.max(1, currentPage - 1);
+                renderPresenceTable();
+            });
+            document.getElementById('nextPage').addEventListener('click', () => {
+                currentPage += 1;
+                renderPresenceTable();
+            });
+            lucide.createIcons();
+            fetchFromGoogleSheets(true);
+            window.setInterval(() => fetchFromGoogleSheets(false), 15000);
+        });
+        })();
+    </script>
+</body>
+</html>
